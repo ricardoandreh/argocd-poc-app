@@ -38,7 +38,6 @@ jobs:
 
       - name: Update kustomization.yaml
         run: |
-          cd k8s
           kustomize edit set image app=ricardoandreh/argocd-poc-app:$GITHUB_SHA
 
       - name: Commit changes
