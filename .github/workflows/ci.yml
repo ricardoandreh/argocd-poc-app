@@ -3,6 +3,7 @@ name: ci
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -52,4 +53,5 @@ jobs:
           branch: main
           github_token: ${{ secrets.GITHUB_TOKEN }}
           repository: ricardoandreh/argocd-poc-k8s
-          commit_message: "deploy: ${{ date('YYYY-MM-DD HH:mm:ss') }}"
+          commit_message: |
+            deploy: $(date '+%Y-%m-%d %H:%M:%S')
