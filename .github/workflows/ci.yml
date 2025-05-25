@@ -5,6 +5,14 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  IMAGE_NAME: ricardoandreh/argocd-test-app
+  K8S_REPO: ricardoandreh/argocd-test-k8s
+  K8S_REPO_BRANCH: main
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+  K8S_REPO_DEPLOY_KEY: ${{ secrets.K8S_REPO_DEPLOY_KEY }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,8 +23,8 @@ jobs:
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -30,27 +38,51 @@ jobs:
           context: .
           push: true
           tags: |
-            ricardoandreh/argocd-poc-app:latest
-            ricardoandreh/argocd-poc-app:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          platforms: linux/amd64,linux/arm64
+
+      - name: Checkout Kubernetes repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.K8S_REPO }}
+          ssh-key: ${{ env.K8S_REPO_DEPLOY_KEY }}
+          path: k8s-repo
+          ref: ${{ env.K8S_REPO_BRANCH }}
 
       - name: Setup Kustomize
         uses: imranismail/setup-kustomize@v2
 
       - name: Update kustomization.yaml
         run: |
-          kustomize edit set image app=ricardoandreh/argocd-poc-app:$GITHUB_SHA
+          kustomize edit set image app=${{ env.IMAGE_NAME }}:${{ github.sha }}
+          git diff
 
-      - name: Commit changes
+      - name: Commit and push changes to K8s repository
         run: |
-          git config --local user.name "GitHub Actions"
+          git config --local user.name "GitHub Actions Bot"
           git config --local user.email "actions@github.com"
-          git commit -am "Update kustomization.yaml with new image"
 
-      - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-          branch: main
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ricardoandreh/argocd-poc-k8s
-          commit_message: |
-            deploy: $(date '+%Y-%m-%d %H:%M:%S')
+          if git diff --staged --quiet; then
+            echo "Nenhuma mudança detectada"
+            exit 0
+          fi
+
+          git commit -am "deploy: update image to ${{ github.sha }}
+
+          - Repository: ${{ github.repository }}
+          - Commit: ${{ github.sha }}
+          - Author: ${{ github.actor }}
+          - Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+          git push origin ${{ env.K8S_REPO_BRANCH }}
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ env.IMAGE_NAME }}:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **K8s Repository**: [${{ env.K8S_REPO }}](https://github.com/${{ env.K8S_REPO }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit SHA**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed at**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
