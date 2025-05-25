@@ -1,4 +1,4 @@
-name: ci
+name: CI/CD Pipeline
 
 on:
   push:
@@ -9,22 +9,19 @@ env:
   IMAGE_NAME: ricardoandreh/argocd-test-app
   K8S_REPO: ricardoandreh/argocd-test-k8s
   K8S_REPO_BRANCH: main
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-  K8S_REPO_DEPLOY_KEY: ${{ secrets.K8S_REPO_DEPLOY_KEY }}
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout app repository
         uses: actions/checkout@v4
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -42,28 +39,36 @@ jobs:
             ${{ env.IMAGE_NAME }}:latest
           platforms: linux/amd64,linux/arm64
 
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.K8S_REPO_DEPLOY_KEY }}
+
       - name: Checkout Kubernetes repository
         uses: actions/checkout@v4
         with:
           repository: ${{ env.K8S_REPO }}
-          ssh-key: ${{ env.K8S_REPO_DEPLOY_KEY }}
+          path: k8s-repo
           ref: ${{ env.K8S_REPO_BRANCH }}
+          ssh-key: ${{ secrets.K8S_REPO_DEPLOY_KEY }}
 
       - name: Setup Kustomize
         uses: imranismail/setup-kustomize@v2
 
       - name: Update kustomization.yaml
+        working-directory: k8s-repo
         run: |
           kustomize edit set image app=${{ env.IMAGE_NAME }}:${{ github.sha }}
           git diff
 
       - name: Commit and push changes to K8s repository
+        working-directory: k8s-repo
         run: |
           git config --local user.name "GitHub Actions Bot"
           git config --local user.email "actions@github.com"
 
-          if git diff --staged --quiet; then
-            echo "Nenhuma mudança detectada"
+          if git diff --quiet; then
+            echo "Nenhuma mudança detectada no repositório K8s"
             exit 0
           fi
 
@@ -78,6 +83,7 @@ jobs:
           git push origin ${{ env.K8S_REPO_BRANCH }}
 
       - name: Create deployment summary
+        if: always()
         run: |
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
