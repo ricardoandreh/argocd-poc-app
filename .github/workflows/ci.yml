@@ -47,7 +47,6 @@ jobs:
         with:
           repository: ${{ env.K8S_REPO }}
           ssh-key: ${{ env.K8S_REPO_DEPLOY_KEY }}
-          path: k8s-repo
           ref: ${{ env.K8S_REPO_BRANCH }}
 
       - name: Setup Kustomize
