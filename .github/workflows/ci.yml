@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: ricardoandreh/argocd-test-app
-  K8S_REPO: ricardoandreh/argocd-test-k8s
+  IMAGE_NAME: ricardoandreh/argocd-poc-app
+  K8S_REPO: ricardoandreh/argocd-poc-k8s
   K8S_REPO_BRANCH: main
 
 jobs:
